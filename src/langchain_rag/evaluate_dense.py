@@ -208,11 +208,11 @@ def main() -> None:
         question_metrics = {}
         for metric_name, metric_function in metric_functions.items():
             for k in METRIC_KS:
-                question_metrics[f"{metric_name}@{k}"] = metric_function(
+                question_metrics[f"{metric_name}@{k}"] = round(metric_function(
                     retrieved_ids,
                     relevant_ids,
                     k,
-                )
+                ), 4)
 
         metrics_by_question[question_id] = question_metrics
 
