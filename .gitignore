@@ -4,4 +4,5 @@ data/processed/
 data/vectorstore/
 __pycache__/
 *.py[cod]
-test.ipynb
+.github/
+notebooks/
