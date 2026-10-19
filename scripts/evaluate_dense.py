@@ -2,14 +2,18 @@ import hashlib
 import json
 import platform
 import subprocess
+import sys
+from collections import defaultdict
 from datetime import datetime, timezone
 from math import log2
 from pathlib import Path
 from statistics import mean
-from collections import defaultdict
 
-from config import ROOT_DIR, DATA_DIR, EMBEDDINGS_MODEL
-from vectorstore import get_vector_store
+SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SOURCE_DIR))
+
+from langchain_rag.config import EMBEDDINGS_MODEL, ROOT_DIR  # noqa: E402
+from langchain_rag.vectorstore import get_vector_store  # noqa: E402
 
 QUESTIONS_PATH = ROOT_DIR / "eval" / "questions.jsonl"
 GROUND_TRUTH_PATH = ROOT_DIR / "eval" / "ground_truth.json"

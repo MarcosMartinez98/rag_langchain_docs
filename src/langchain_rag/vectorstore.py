@@ -3,19 +3,15 @@ from pathlib import Path
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 
-if __package__:
-    from .config import DATA_DIR, EMBEDDINGS_MODEL, FILE_NAME
-    from .ingest import ingest
-else:
-    from config import DATA_DIR, EMBEDDINGS_MODEL, FILE_NAME
-    from ingest import ingest
+from .config import DATA_DIR, EMBEDDINGS_MODEL, FILE_NAME
+from .ingest import ingest
 
 
-def get_vector_store(embeddings_model: str, data_dir: str | Path) -> Chroma:
-    embeddings = OllamaEmbeddings(model=embeddings_model)
+def get_vector_store() -> Chroma:
+    embeddings = OllamaEmbeddings(model=EMBEDDINGS_MODEL)
     return Chroma(
         embedding_function=embeddings,
-        persist_directory=str(Path(data_dir) / ".chromaDB"),
+        persist_directory=str(Path(DATA_DIR) / ".chromaDB"),
         collection_name="rag_langchain_documents"
     )
 
@@ -42,7 +38,7 @@ if __name__ == "__main__":
     if not chunks:
         raise ValueError(f"No chunks were created from {path}; index was not changed.")
 
-    vectorstore = get_vector_store(EMBEDDINGS_MODEL, DATA_DIR)
+    vectorstore = get_vector_store()
     batch_size = 100
     expected_ids = set()
     for chunk in chunks:

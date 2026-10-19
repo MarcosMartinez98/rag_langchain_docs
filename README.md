@@ -21,3 +21,11 @@ After parsing, use `data/processed/docs.jsonl` for ingestion and evaluation. Do 
 `eval/questions.jsonl` is the candidate benchmark tied to the `corpus_commit` in each record. Each question records its answerability, primary intent, and whether answering it requires one evidence unit or multiple evidence hops. Expected sources are labeled `required` when they establish a required fact and `optional` when they only provide additional context.
 
 Review and validate the candidate against `data/processed/docs.jsonl` before freezing it and recording its checksum. Do not modify a frozen benchmark to improve system scores.
+
+## Run the dense retrieval evaluation
+
+From the repository root, run:
+
+```powershell
+python .\scripts\evaluate_dense.py
+```
