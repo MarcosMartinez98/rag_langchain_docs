@@ -3,8 +3,8 @@ from pathlib import Path
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 
-from .config import DATA_DIR, EMBEDDINGS_MODEL, FILE_NAME
-from .ingest import ingest
+from config import DATA_DIR, EMBEDDINGS_MODEL, FILE_NAME
+from ingest import ingest
 
 
 def get_vector_store() -> Chroma:
