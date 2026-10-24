@@ -1,26 +1,44 @@
+"""Evaluate dense Chroma retrieval against the fixed evaluation benchmark.
+
+Run from the repository root:
+
+    python .\\scripts\\evaluate_dense.py
+
+Use ``--nomic-prefix`` to evaluate the experimental Nomic-prefixed collection
+and write a separate report:
+
+    python .\\scripts\\evaluate_dense.py --nomic-prefix
+"""
+
+import argparse
 import hashlib
 import json
 import platform
 import subprocess
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from math import log2
 from pathlib import Path
 from statistics import mean
 
-SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
-sys.path.insert(0, str(SOURCE_DIR))
+MODULE_DIR = Path(__file__).resolve().parents[1] / "src" / "langchain_rag"
+sys.path.insert(0, str(MODULE_DIR))
 
-from langchain_rag.config import EMBEDDINGS_MODEL, ROOT_DIR  # noqa: E402
-from langchain_rag.vectorstore import get_vector_store  # noqa: E402
+from config import (
+    COLLECTION_NAME,
+    COLLECTION_NAME_WITH_PREFIX,
+    EMBEDDINGS_MODEL,
+    ROOT_DIR,
+)
+from vectorstore import get_vector_store
 
 QUESTIONS_PATH = ROOT_DIR / "eval" / "questions.jsonl"
 GROUND_TRUTH_PATH = ROOT_DIR / "eval" / "ground_truth.json"
 CORPUS_COMMIT_PATH = ROOT_DIR / "data" / "raw" / "docs.commit"
 OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "dense-baseline-v1.json"
+PREFIX_OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "dense-nomic-prefix-v1.json"
 
-COLLECTION_NAME = "rag_langchain_documents"
 RETRIEVAL_K = 10
 METRIC_KS = (1, 3, 5, 10)
 
@@ -114,6 +132,16 @@ def get_git_state() -> tuple[str, bool]:
     return revision, bool(status)
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Evaluate dense retrieval against the fixed benchmark."
+    )
+    parser.add_argument(
+        "--nomic-prefix",
+        action="store_true",
+        help="Evaluate the experimental Nomic task-prefixed Chroma collection.",
+    )
+    arguments = parser.parse_args()
+
     if not METRIC_KS or any(k <= 0 for k in METRIC_KS):
         raise ValueError("METRIC_KS must contain positive integers.")
     if RETRIEVAL_K < max(METRIC_KS):
@@ -154,7 +182,11 @@ def main() -> None:
             "Question benchmark corpus_commit does not match data/raw/docs.commit."
         )
 
-    vectorstore = get_vector_store()
+    vectorstore = get_vector_store(use_nomic_prefix=arguments.nomic_prefix)
+    collection_name = (
+        COLLECTION_NAME_WITH_PREFIX if arguments.nomic_prefix else COLLECTION_NAME
+    ) # defined for the ouput summary
+    output_path = PREFIX_OUTPUT_PATH if arguments.nomic_prefix else OUTPUT_PATH
 
     # Fail early if ground-truth chunk IDs do not belong to this Chroma index.
     index_data = vectorstore.get(include=["metadatas"])
@@ -233,12 +265,28 @@ def main() -> None:
     git_revision, git_worktree_dirty = get_git_state()
 
     report = {
-        "run_name": "dense-baseline-v1",
-        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "run_name": (
+            "dense-nomic-prefix-v1"
+            if arguments.nomic_prefix
+            else "dense-baseline-v1"
+        ),
+        "created_at_utc": datetime.now(UTC).isoformat(),
         "configuration": {
-            "retrieval_method": "dense similarity search",
+            "retrieval_method": (
+                "dense similarity search with Nomic task prefixes"
+                if arguments.nomic_prefix
+                else "dense similarity search"
+            ),
             "embedding_model": EMBEDDINGS_MODEL,
-            "collection_name": COLLECTION_NAME,
+            "collection_name": collection_name,
+            "embedding_prefixes": (
+                {
+                    "documents": "search_document: ",
+                    "queries": "search_query: ",
+                }
+                if arguments.nomic_prefix
+                else None
+            ),
             "distance_metric": "l2",
             "retrieval_k": RETRIEVAL_K,
             "metric_ks": list(METRIC_KS),
@@ -269,14 +317,14 @@ def main() -> None:
         "mean_metrics_answerable_questions": mean_metrics,
     }
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # "x" prevents silently replacing a previously recorded baseline.
-    with OUTPUT_PATH.open("x", encoding="utf-8") as output_file:
+    with output_path.open("x", encoding="utf-8") as output_file:
         json.dump(report, output_file, indent=2, ensure_ascii=False)
         output_file.write("\n")
 
-    print(f"Saved baseline report to: {OUTPUT_PATH}")
+    print(f"Saved baseline report to: {output_path}")
     print("Mean metrics over answerable questions:")
     for metric_name, value in mean_metrics.items():
         print(f"  {metric_name}: {value:.3f}")
