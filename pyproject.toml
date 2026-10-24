@@ -21,4 +21,4 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "src/langchain_rag"]

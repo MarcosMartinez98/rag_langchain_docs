@@ -15,11 +15,11 @@ from langchain_community.retrievers.bm25 import (
     default_preprocessing_func,
 )
 
-SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
-sys.path.insert(0, str(SOURCE_DIR))
+MODULE_DIR = Path(__file__).resolve().parents[1] / "src" / "langchain_rag"
+sys.path.insert(0, str(MODULE_DIR))
 
-from langchain_rag.config import DATA_DIR, ROOT_DIR
-from langchain_rag.ingest import ingest
+from config import DATA_DIR, ROOT_DIR
+from ingest import ingest
 
 DOCS_PATH = DATA_DIR / "processed" / "docs.jsonl"
 QUESTIONS_PATH = ROOT_DIR / "eval" / "questions.jsonl"

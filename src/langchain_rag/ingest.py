@@ -2,16 +2,13 @@ import json
 from hashlib import sha256
 from pathlib import Path
 
+from config import DATA_DIR, FILE_NAME
 from langchain_core.documents import Document
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
 )
 
-if __package__:
-    from .config import DATA_DIR, FILE_NAME
-else:
-    from config import DATA_DIR, FILE_NAME
 
 def get_content(path: Path) -> list[dict]:
     with path.open("r", encoding="utf-8") as file:

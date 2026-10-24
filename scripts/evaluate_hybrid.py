@@ -17,12 +17,12 @@ from langchain_community.retrievers.bm25 import (
 )
 from langchain_core.documents import Document
 
-SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
-sys.path.insert(0, str(SOURCE_DIR))
+MODULE_DIR = Path(__file__).resolve().parents[1] / "src" / "langchain_rag"
+sys.path.insert(0, str(MODULE_DIR))
 
-from langchain_rag.config import DATA_DIR, EMBEDDINGS_MODEL, ROOT_DIR
-from langchain_rag.ingest import ingest
-from langchain_rag.vectorstore import get_vector_store
+from config import DATA_DIR, EMBEDDINGS_MODEL, ROOT_DIR
+from ingest import ingest
+from vectorstore import get_vector_store
 
 DOCS_PATH = DATA_DIR / "processed" / "docs.jsonl"
 QUESTIONS_PATH = ROOT_DIR / "eval" / "questions.jsonl"
