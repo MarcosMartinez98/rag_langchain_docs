@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from math import log2
 from pathlib import Path
 from statistics import mean
+from typing import TypedDict
 
 MODULE_DIR = Path(__file__).resolve().parents[1] / "src" / "langchain_rag"
 sys.path.insert(0, str(MODULE_DIR))
@@ -36,19 +37,36 @@ from vectorstore import get_vector_store
 QUESTIONS_PATH = ROOT_DIR / "eval" / "questions.jsonl"
 GROUND_TRUTH_PATH = ROOT_DIR / "eval" / "ground_truth.json"
 CORPUS_COMMIT_PATH = ROOT_DIR / "data" / "raw" / "docs.commit"
-OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "dense-baseline-v1.json"
-PREFIX_OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "dense-nomic-prefix-v1.json"
+OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "dense-baseline-k100-v1.json"
+PREFIX_OUTPUT_PATH = (
+    ROOT_DIR / "eval" / "runs" / "dense" / "dense-nomic-prefix-k100-v1.json"
+)
 
-RETRIEVAL_K = 10
-METRIC_KS = (1, 3, 5, 10)
+RETRIEVAL_K = 100
+METRIC_KS = (1, 3, 5, 10, 20, 50, 100)
+
+
+class RetrievedChunk(TypedDict):
+    chunk_id: str
+    score: float
+
+
+class GroundTruthChunkDiagnostic(TypedDict):
+    chunk_id: str
+    rank: int | None
+    distance: float | None
+    retrieved_within_k: bool
+
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
 
 def load_questions() -> list[dict]:
     with open(QUESTIONS_PATH, "r", encoding="utf-8") as file:
         content = file.read()
     return [json.loads(line) for line in content.splitlines()]
+
 
 def load_ground_truth() -> dict[str, set[str]]:
     with open(GROUND_TRUTH_PATH, "r", encoding="utf-8") as file:
@@ -57,6 +75,7 @@ def load_ground_truth() -> dict[str, set[str]]:
         entry["question_id"]: set(entry["relevant_chunks_id"])
         for entry in content
     }
+
 
 def recall_at_k(
     retrieved_ids: list[str],
@@ -68,6 +87,7 @@ def recall_at_k(
 
     found = set(retrieved_ids[:k]) & relevant_ids
     return len(found) / len(relevant_ids)
+
 
 def precision_at_k(
     retrieved_ids: list[str],
@@ -81,6 +101,7 @@ def precision_at_k(
     found = set(retrieved_ids[:k]) & relevant_ids
     return len(found) / denominator
 
+
 def mrr_at_k(
     retrieved_ids: list[str],
     relevant_ids: set[str],
@@ -91,6 +112,7 @@ def mrr_at_k(
             return 1 / rank
 
     return 0.0
+
 
 def ndcg_at_k(
     retrieved_ids: list[str],
@@ -112,6 +134,31 @@ def ndcg_at_k(
 
     return dcg / idcg if idcg else 0.0
 
+
+def get_ground_truth_chunk_diagnostics(
+    retrieved_items: list[RetrievedChunk],
+    relevant_ids: set[str],
+) -> list[GroundTruthChunkDiagnostic]:
+    retrieved_by_id = {
+        item["chunk_id"]: (rank, item["score"])
+        for rank, item in enumerate(retrieved_items, start=1)
+    }
+
+    diagnostics = []
+    for chunk_id in sorted(relevant_ids):
+        retrieved = retrieved_by_id.get(chunk_id)
+        diagnostics.append(
+            {
+                "chunk_id": chunk_id,
+                "rank": retrieved[0] if retrieved else None,
+                "distance": retrieved[1] if retrieved else None,
+                "retrieved_within_k": retrieved is not None,
+            }
+        )
+
+    return diagnostics
+
+
 def get_git_state() -> tuple[str, bool]:
     revision = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -130,6 +177,7 @@ def get_git_state() -> tuple[str, bool]:
     ).stdout.strip()
 
     return revision, bool(status)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -199,7 +247,10 @@ def main() -> None:
             f"{len(missing_ids)} ground-truth chunk IDs are missing from Chroma."
         )
 
-    retrieved_by_question: dict[str, list[dict]] = {}
+    retrieved_by_question: dict[str, list[RetrievedChunk]] = {}
+    ground_truth_chunk_diagnostics: dict[
+        str, list[GroundTruthChunkDiagnostic]
+    ] = {}
     metrics_by_question: dict[str, dict[str, float]] = {}
 
     metric_functions = {
@@ -221,7 +272,7 @@ def main() -> None:
         )
 
         retrieved_ids = []
-        retrieved_items = []
+        retrieved_items: list[RetrievedChunk] = []
 
         for doc, score in results:
             if doc.id is None:
@@ -237,6 +288,9 @@ def main() -> None:
 
         relevant_ids = relevant_by_question[question_id]
         retrieved_by_question[question_id] = retrieved_items
+        ground_truth_chunk_diagnostics[question_id] = (
+            get_ground_truth_chunk_diagnostics(retrieved_items, relevant_ids)
+        )
 
         if question["answerability"] != "answerable":
             continue # Ignore the non-answerable for building metrics
@@ -266,9 +320,9 @@ def main() -> None:
 
     report = {
         "run_name": (
-            "dense-nomic-prefix-v1"
+            "dense-nomic-prefix-k100-v1"
             if arguments.nomic_prefix
-            else "dense-baseline-v1"
+            else "dense-baseline-k100-v1"
         ),
         "created_at_utc": datetime.now(UTC).isoformat(),
         "configuration": {
@@ -313,6 +367,7 @@ def main() -> None:
             "evaluation_script_sha256": sha256_file(Path(__file__)),
         },
         "retrieval_by_question": retrieved_by_question,
+        "ground_truth_chunk_diagnostics": ground_truth_chunk_diagnostics,
         "metrics_by_question": metrics_by_question,
         "mean_metrics_answerable_questions": mean_metrics,
     }

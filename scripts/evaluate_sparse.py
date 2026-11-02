@@ -10,25 +10,23 @@ from math import log2
 from pathlib import Path
 from statistics import mean
 
-from langchain_community.retrievers.bm25 import (
-    BM25Retriever,
-    default_preprocessing_func,
-)
+from langchain_community.retrievers.bm25 import BM25Retriever
 
 MODULE_DIR = Path(__file__).resolve().parents[1] / "src" / "langchain_rag"
 sys.path.insert(0, str(MODULE_DIR))
 
 from config import DATA_DIR, ROOT_DIR
 from ingest import ingest
+from tokenization import bm25_tokenize
 
 DOCS_PATH = DATA_DIR / "processed" / "docs.jsonl"
 QUESTIONS_PATH = ROOT_DIR / "eval" / "questions.jsonl"
 GROUND_TRUTH_PATH = ROOT_DIR / "eval" / "ground_truth.json"
 CORPUS_COMMIT_PATH = ROOT_DIR / "data" / "raw" / "docs.commit"
-OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "sparse-baseline-v1.json"
+OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "sparse" / "sparse-normalized-k250-v1.json"
 
-RETRIEVAL_K = 10
-METRIC_KS = (1, 3, 5, 10)
+RETRIEVAL_K = 250
+METRIC_KS = (1, 3, 5, 10, 20, 50, 100)
 BM25_PARAMS = {"k1": 1.5, "b": 0.75, "epsilon": 0.25}
 
 def sha256_file(path: Path) -> str:
@@ -166,7 +164,7 @@ def main() -> None:
         chunks,
         k=RETRIEVAL_K,
         bm25_params=BM25_PARAMS,
-        preprocess_func=default_preprocessing_func,
+        preprocess_func=bm25_tokenize,
     )
 
     retrieved_by_question: dict[str, list[dict]] = {}
@@ -232,10 +230,10 @@ def main() -> None:
     git_revision, git_worktree_dirty = get_git_state()
 
     report = {
-        "run_name": "sparse-baseline-v1",
+        "run_name": "sparse-normalized-k250-v1",
         "created_at_utc": datetime.now(UTC).isoformat(),
         "configuration": {
-            "retrieval_method": "bm25",
+            "retrieval_method": "bm25 with normalized tokenization",
             "retrieval_k": RETRIEVAL_K,
             "metric_ks": list(METRIC_KS),
             "bm25": {
@@ -243,12 +241,12 @@ def main() -> None:
                 "parameters": BM25_PARAMS,
                 "tokenizer": {
                     "function": (
-                        f"{default_preprocessing_func.__module__}."
-                        f"{default_preprocessing_func.__qualname__}"
+                        f"{bm25_tokenize.__module__}."
+                        f"{bm25_tokenize.__qualname__}"
                     ),
                     "behavior": (
-                        "text.split(): whitespace tokenization; preserves case "
-                        "and punctuation"
+                        "casefolds text, splits on punctuation, and preserves "
+                        "underscores in technical identifiers"
                     ),
                 },
             },
@@ -291,7 +289,7 @@ def main() -> None:
         json.dump(report, output_file, indent=2, ensure_ascii=False)
         output_file.write("\n")
 
-    print(f"Saved baseline report to: {OUTPUT_PATH}")
+    print(f"Saved normalized BM25 report to: {OUTPUT_PATH}")
     print("Mean metrics over answerable questions:")
     for metric_name, value in mean_metrics.items():
         print(f"  {metric_name}: {value:.3f}")

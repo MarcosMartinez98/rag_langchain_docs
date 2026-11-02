@@ -11,10 +11,7 @@ from math import log2
 from pathlib import Path
 from statistics import mean
 
-from langchain_community.retrievers.bm25 import (
-    BM25Retriever,
-    default_preprocessing_func,
-)
+from langchain_community.retrievers.bm25 import BM25Retriever
 from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
 
@@ -23,13 +20,16 @@ sys.path.insert(0, str(MODULE_DIR))
 
 from config import DATA_DIR, EMBEDDINGS_MODEL, ROOT_DIR
 from ingest import ingest
+from tokenization import bm25_tokenize
 from vectorstore import get_vector_store
 
 DOCS_PATH = DATA_DIR / "processed" / "docs.jsonl"
 QUESTIONS_PATH = ROOT_DIR / "eval" / "questions.jsonl"
 GROUND_TRUTH_PATH = ROOT_DIR / "eval" / "ground_truth.json"
 CORPUS_COMMIT_PATH = ROOT_DIR / "data" / "raw" / "docs.commit"
-OUTPUT_PATH = ROOT_DIR / "eval" / "runs" / "reranker-hybrid-rrf-v1.json"
+OUTPUT_PATH = (
+    ROOT_DIR / "eval" / "runs" / "reranker" / "reranker-tokenized-hybrid-rrf-v1.json"
+)
 
 COLLECTION_NAME = "rag_langchain_documents"
 BM25_PARAMS = {"k1": 1.5, "b": 0.75, "epsilon": 0.25}
@@ -263,7 +263,7 @@ def main() -> None:
         chunks,
         k=CANDIDATE_K,
         bm25_params=BM25_PARAMS,
-        preprocess_func=default_preprocessing_func,
+        preprocess_func=bm25_tokenize,
     )
 
     reranker = CrossEncoder(RERANKER_MODEL, revision=RERANKER_REVISION)
@@ -404,7 +404,7 @@ def main() -> None:
     git_revision, git_worktree_dirty = get_git_state()
 
     report = {
-        "run_name": "hybrid-rrf-reranker-v1",
+        "run_name": "tokenized-hybrid-rrf-reranker-v1",
         "created_at_utc": datetime.now(UTC).isoformat(),
         "configuration": {
             "retrieval_method": (
@@ -427,12 +427,12 @@ def main() -> None:
                     "parameters": BM25_PARAMS,
                     "tokenizer": {
                         "function": (
-                            f"{default_preprocessing_func.__module__}."
-                            f"{default_preprocessing_func.__qualname__}"
+                            f"{bm25_tokenize.__module__}."
+                            f"{bm25_tokenize.__qualname__}"
                         ),
                         "behavior": (
-                            "text.split(): whitespace tokenization; preserves case "
-                            "and punctuation"
+                            "casefolds text, splits on punctuation, and preserves "
+                            "underscores in technical identifiers"
                         ),
                     },
                 },
